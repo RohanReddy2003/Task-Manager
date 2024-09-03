@@ -1,4 +1,4 @@
-# To-Do-Items
+# Task Manager
 # Regestration Page
 ![Screenshot (24)](https://github.com/user-attachments/assets/6b913a86-9719-40de-a995-114ae457e2b0)
 
