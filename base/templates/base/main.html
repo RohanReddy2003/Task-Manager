@@ -1,4 +1,4 @@
-{% load static %}
+<!-- {% load static %}
 <!DOCTYPE html>
 <html lang="en">
 
@@ -209,4 +209,76 @@
 </body>
 
 
-</html>
+</html> -->
+
+
+{% extends 'base/base.html' %}
+
+{% block title %}My Tasks | TaskFlow{% endblock title %}
+
+{% block content %}
+    <div class="page-heading">
+        <h1>My Tasks</h1>
+        <p>Stay organized and keep making progress.</p>
+    </div>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total tasks</div>
+            <div class="stat-value">{{ total_tasks }}</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Completed</div>
+            <div class="stat-value">{{ completed_tasks }}</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Pending</div>
+            <div class="stat-value">{{ pending_tasks }}</div>
+        </div>
+    </div>
+
+    <p>{{ dashboard_message }}</p>
+
+    <div class="progress-track"
+         role="progressbar"
+         aria-label="Task completion"
+         aria-valuemin="0"
+         aria-valuemax="100"
+         aria-valuenow="{{ completion_percentage }}">
+        <div class="progress-fill"
+             style="width: {{ completion_percentage }}%;">
+        </div>
+    </div>
+
+    <p>{{ completion_percentage }}% completed</p>
+
+    {% for task in tasks %}
+        <div class="task-wrapper">
+            <div class="task-title">
+                <span class="{% if task.complete %}task-complete-icon{% else %}task-incomplete-icon{% endif %}"
+                      aria-hidden="true"></span>
+
+                <a href="{% url 'task' task.id %}">
+                    {{ task.title }}
+                </a>
+            </div>
+
+            <a class="delete-link"
+               href="{% url 'task-delete' task.id %}"
+               aria-label="Delete {{ task.title }}">
+                &times;
+            </a>
+        </div>
+    {% empty %}
+        <div class="empty-state">
+            <div class="empty-state-icon" aria-hidden="true">📝</div>
+            <h3>No tasks yet</h3>
+            <p>Create your first task to get started.</p>
+            <a class="button" href="{% url 'task-create' %}">
+                + Create task
+            </a>
+        </div>
+    {% endfor %}
+{% endblock content %}
