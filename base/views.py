@@ -1,111 +1,3 @@
-# from django.shortcuts import render, redirect
-# from django.views.generic.list import ListView
-# from django.views.generic.detail import DetailView
-# from django.views.generic.edit import CreateView, UpdateView, DeleteView, FormView
-# from django.urls import reverse_lazy
-
-# from django.contrib.auth.views import LoginView
-# from django.contrib.auth.mixins import LoginRequiredMixin
-# from django.contrib.auth.forms import UserCreationForm
-# from django.contrib.auth import login
-
-# # Imports for Reordering Feature
-# from django.views import View
-# from django.shortcuts import redirect
-# from django.db import transaction
-
-# from .models import Task
-# from .forms import PositionForm
-
-
-# class CustomLoginView(LoginView):
-#     template_name = 'base/login.html'
-#     fields = '__all__'
-#     redirect_authenticated_user = True
-
-#     def get_success_url(self):
-#         return reverse_lazy('tasks')
-
-
-# class RegisterPage(FormView):
-#     template_name = 'base/register.html'
-#     form_class = UserCreationForm
-#     redirect_authenticated_user = True
-#     success_url = reverse_lazy('tasks')
-
-#     def form_valid(self, form):
-#         user = form.save()
-#         if user is not None:
-#             login(self.request, user)
-#         return super(RegisterPage, self).form_valid(form)
-
-#     def get(self, *args, **kwargs):
-#         if self.request.user.is_authenticated:
-#             return redirect('tasks')
-#         return super(RegisterPage, self).get(*args, **kwargs)
-
-
-# class TaskList(LoginRequiredMixin, ListView):
-#     model = Task
-#     context_object_name = 'tasks'
-
-#     def get_context_data(self, **kwargs):
-#         context = super().get_context_data(**kwargs)
-#         context['tasks'] = context['tasks'].filter(user=self.request.user)
-#         context['count'] = context['tasks'].filter(complete=False).count()
-
-#         search_input = self.request.GET.get('search-area') or ''
-#         if search_input:
-#             context['tasks'] = context['tasks'].filter(
-#                 title__contains=search_input)
-
-#         context['search_input'] = search_input
-
-#         return context
-
-
-# class TaskDetail(LoginRequiredMixin, DetailView):
-#     model = Task
-#     context_object_name = 'task'
-#     template_name = 'base/task.html'
-
-
-# class TaskCreate(LoginRequiredMixin, CreateView):
-#     model = Task
-#     fields = ['title', 'description', 'complete']
-#     success_url = reverse_lazy('tasks')
-
-#     def form_valid(self, form):
-#         form.instance.user = self.request.user
-#         return super(TaskCreate, self).form_valid(form)
-
-
-# class TaskUpdate(LoginRequiredMixin, UpdateView):
-#     model = Task
-#     fields = ['title', 'description', 'complete']
-#     success_url = reverse_lazy('tasks')
-
-
-# class DeleteView(LoginRequiredMixin, DeleteView):
-#     model = Task
-#     context_object_name = 'task'
-#     success_url = reverse_lazy('tasks')
-#     def get_queryset(self):
-#         owner = self.request.user
-#         return self.model.objects.filter(user=owner)
-
-# class TaskReorder(View):
-#     def post(self, request):
-#         form = PositionForm(request.POST)
-
-#         if form.is_valid():
-#             positionList = form.cleaned_data["position"].split(',')
-
-#             with transaction.atomic():
-#                 self.request.user.set_task_order(positionList)
-
-#         return redirect(reverse_lazy('tasks'))
-
 from django.shortcuts import render, redirect, get_object_or_404
 from django.views.generic.list import ListView
 from django.views.generic.detail import DetailView
@@ -877,3 +769,603 @@ class TaskSummary(LoginRequiredMixin, View):
             context
         )
 
+# from django import forms
+# from django.contrib import messages
+# from django.contrib.auth import login
+# from django.contrib.auth.forms import UserCreationForm
+# from django.contrib.auth.mixins import LoginRequiredMixin
+# from django.contrib.auth.views import LoginView
+# from django.db import transaction
+# from django.db.models import Q, Count, Case, When, Value, IntegerField
+# from django.http import HttpResponseRedirect
+# from django.shortcuts import render, redirect, get_object_or_404
+# from django.urls import reverse_lazy
+# from django.views import View
+# from django.views.generic import ListView, DetailView
+# from django.views.generic.edit import (
+#     CreateView,
+#     UpdateView,
+#     DeleteView as DjangoDeleteView,
+#     FormView,
+# )
+
+# from .models import Task
+# from .forms import PositionForm
+
+
+# # ============================================================
+# # SHARED TASK UTILITIES
+# # ============================================================
+
+# class OwnedTaskMixin:
+#     """
+#     Reusable queryset restriction for task-related views.
+#     Prevents users from accessing other users' tasks.
+#     """
+
+#     def get_queryset(self):
+#         return super().get_queryset().filter(
+#             user=self.request.user
+#         )
+
+
+# class TaskStatsMixin:
+#     """
+#     Shared task statistics for dashboard and task list views.
+#     """
+
+#     def get_task_stats(self):
+#         stats = Task.objects.filter(
+#             user=self.request.user
+#         ).aggregate(
+#             total=Count("id"),
+#             completed=Count(
+#                 "id",
+#                 filter=Q(complete=True),
+#             ),
+#             pending=Count(
+#                 "id",
+#                 filter=Q(complete=False),
+#             ),
+#         )
+
+#         total = stats["total"] or 0
+#         completed = stats["completed"] or 0
+#         pending = stats["pending"] or 0
+
+#         percentage = (
+#             round(completed * 100 / total)
+#             if total else 0
+#         )
+
+#         return {
+#             "total_tasks": total,
+#             "completed_tasks": completed,
+#             "pending_tasks": pending,
+#             "completion_percentage": percentage,
+#         }
+
+
+# # ============================================================
+# # LOGIN
+# # ============================================================
+
+# class CustomLoginView(LoginView):
+#     template_name = "base/login.html"
+#     redirect_authenticated_user = True
+
+#     def get_success_url(self):
+#         return reverse_lazy("tasks")
+
+#     def form_valid(self, form):
+#         messages.success(
+#             self.request,
+#             "Welcome back! You have successfully logged in.",
+#         )
+#         return super().form_valid(form)
+
+
+# # ============================================================
+# # REGISTRATION
+# # ============================================================
+
+# class RegisterPage(FormView):
+#     template_name = "base/register.html"
+#     form_class = UserCreationForm
+#     success_url = reverse_lazy("tasks")
+
+#     def dispatch(self, request, *args, **kwargs):
+#         if request.user.is_authenticated:
+#             return redirect("tasks")
+
+#         return super().dispatch(request, *args, **kwargs)
+
+#     def form_valid(self, form):
+#         user = form.save()
+#         login(self.request, user)
+
+#         messages.success(
+#             self.request,
+#             "Your account has been created successfully.",
+#         )
+
+#         return super().form_valid(form)
+
+
+# # ============================================================
+# # TASK LIST
+# # ============================================================
+
+# class TaskList(
+#     LoginRequiredMixin,
+#     TaskStatsMixin,
+#     ListView,
+# ):
+#     model = Task
+#     context_object_name = "tasks"
+#     template_name = "base/task_list.html"
+#     paginate_by = 20
+
+#     SORT_OPTIONS = {
+#         "title": "title",
+#         "title_desc": "-title",
+#         "newest": "-id",
+#         "oldest": "id",
+#         "completed": "-complete",
+#     }
+
+#     def get_queryset(self):
+#         queryset = Task.objects.filter(
+#             user=self.request.user
+#         )
+
+#         search = self.request.GET.get(
+#             "search-area", ""
+#         ).strip()
+
+#         status = self.request.GET.get(
+#             "status", ""
+#         ).strip()
+
+#         sort = self.request.GET.get(
+#             "sort", ""
+#         ).strip()
+
+#         # Search
+#         if search:
+#             queryset = queryset.filter(
+#                 Q(title__icontains=search)
+#                 | Q(description__icontains=search)
+#             )
+
+#         # Status filtering
+#         if status == "completed":
+#             queryset = queryset.filter(complete=True)
+#         elif status == "pending":
+#             queryset = queryset.filter(complete=False)
+
+#         # Sorting with a whitelist
+#         ordering = self.SORT_OPTIONS.get(sort, "id")
+#         queryset = queryset.order_by(ordering, "id")
+
+#         return queryset
+
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+
+#         stats = self.get_task_stats()
+#         context.update(stats)
+
+#         context["search_input"] = self.request.GET.get(
+#             "search-area", ""
+#         )
+#         context["current_status"] = self.request.GET.get(
+#             "status", ""
+#         )
+#         context["current_sort"] = self.request.GET.get(
+#             "sort", ""
+#         )
+
+#         total = stats["total_tasks"]
+#         completed = stats["completed_tasks"]
+#         pending = stats["pending_tasks"]
+
+#         context["has_tasks"] = total > 0
+#         context["has_completed_tasks"] = completed > 0
+#         context["has_pending_tasks"] = pending > 0
+
+#         if total == 0:
+#             message = "You currently have no tasks."
+#         elif pending == 0:
+#             message = "Great job! You completed all your tasks."
+#         elif completed == 0:
+#             message = "You have some tasks waiting for you."
+#         else:
+#             message = "Keep going! You are making progress."
+
+#         context["dashboard_message"] = message
+
+#         return context
+
+
+# # ============================================================
+# # TASK DETAIL
+# # ============================================================
+
+# class TaskDetail(LoginRequiredMixin, OwnedTaskMixin, DetailView):
+#     model = Task
+#     context_object_name = "task"
+#     template_name = "base/task.html"
+
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+
+#         context["is_completed"] = self.object.complete
+#         context["task_status"] = (
+#             "Completed" if self.object.complete else "Pending"
+#         )
+
+#         return context
+
+
+# # ============================================================
+# # CREATE TASK
+# # ============================================================
+
+# class TaskCreate(LoginRequiredMixin, CreateView):
+#     model = Task
+#     fields = ["title", "description", "complete"]
+#     template_name = "base/task_form.html"
+#     success_url = reverse_lazy("tasks")
+
+#     def form_valid(self, form):
+#         form.instance.user = self.request.user
+
+#         response = super().form_valid(form)
+
+#         messages.success(
+#             self.request,
+#             "Task created successfully.",
+#         )
+
+#         return response
+
+#     def form_invalid(self, form):
+#         messages.error(
+#             self.request,
+#             "Please correct the errors below.",
+#         )
+#         return super().form_invalid(form)
+
+
+# # ============================================================
+# # UPDATE TASK
+# # ============================================================
+
+# class TaskUpdate(
+#     LoginRequiredMixin,
+#     OwnedTaskMixin,
+#     UpdateView,
+# ):
+#     model = Task
+#     fields = ["title", "description", "complete"]
+#     template_name = "base/task_form.html"
+#     success_url = reverse_lazy("tasks")
+
+#     def form_valid(self, form):
+#         response = super().form_valid(form)
+
+#         messages.success(
+#             self.request,
+#             "Task updated successfully.",
+#         )
+
+#         return response
+
+
+# # ============================================================
+# # DELETE TASK
+# # ============================================================
+
+# class TaskDelete(
+#     LoginRequiredMixin,
+#     OwnedTaskMixin,
+#     DjangoDeleteView,
+# ):
+#     model = Task
+#     context_object_name = "task"
+#     template_name = "base/task_confirm_delete.html"
+#     success_url = reverse_lazy("tasks")
+
+#     def form_valid(self, form):
+#         messages.success(
+#             self.request,
+#             "Task deleted successfully.",
+#         )
+#         return super().form_valid(form)
+
+
+# # ============================================================
+# # TOGGLE TASK COMPLETION
+# # ============================================================
+
+# class TaskToggleComplete(LoginRequiredMixin, View):
+
+#     def post(self, request, pk):
+#         task = get_object_or_404(
+#             Task,
+#             pk=pk,
+#             user=request.user,
+#         )
+
+#         task.complete = not task.complete
+#         task.save(update_fields=["complete"])
+
+#         if task.complete:
+#             messages.success(
+#                 request,
+#                 f'"{task.title}" marked as complete.',
+#             )
+#         else:
+#             messages.info(
+#                 request,
+#                 f'"{task.title}" marked as pending.',
+#             )
+
+#         return redirect("tasks")
+
+
+# # ============================================================
+# # DUPLICATE TASK
+# # ============================================================
+
+# class TaskDuplicate(LoginRequiredMixin, View):
+
+#     def post(self, request, pk):
+#         original = get_object_or_404(
+#             Task,
+#             pk=pk,
+#             user=request.user,
+#         )
+
+#         duplicate = Task.objects.create(
+#             user=request.user,
+#             title=f"{original.title} (Copy)",
+#             description=original.description,
+#             complete=False,
+#         )
+
+#         messages.success(
+#             request,
+#             f'Task "{duplicate.title}" was created.',
+#         )
+
+#         return redirect("tasks")
+
+
+# # ============================================================
+# # BULK TASK ACTIONS
+# # ============================================================
+
+# class BulkTaskAction(LoginRequiredMixin, View):
+#     """
+#     Base class for efficient, user-scoped bulk operations.
+#     """
+
+#     complete_value = None
+#     success_message = ""
+#     message_level = messages.SUCCESS
+
+#     def post(self, request):
+#         queryset = Task.objects.filter(
+#             user=request.user,
+#             complete=not self.complete_value,
+#         )
+
+#         updated_count = queryset.update(
+#             complete=self.complete_value
+#         )
+
+#         messages.add_message(
+#             request,
+#             self.message_level,
+#             self.success_message.format(count=updated_count),
+#         )
+
+#         return redirect("tasks")
+
+
+# class CompleteAllTasks(BulkTaskAction):
+#     complete_value = True
+#     success_message = "{count} task(s) marked as complete."
+
+
+# class ReopenAllTasks(BulkTaskAction):
+#     complete_value = False
+#     success_message = "{count} task(s) reopened."
+#     message_level = messages.INFO
+
+
+# class DeleteCompletedTasks(LoginRequiredMixin, View):
+
+#     def post(self, request):
+#         deleted_count, _ = Task.objects.filter(
+#             user=request.user,
+#             complete=True,
+#         ).delete()
+
+#         messages.success(
+#             request,
+#             f"{deleted_count} completed task(s) deleted.",
+#         )
+
+#         return redirect("tasks")
+
+
+# # ============================================================
+# # TASK SEARCH
+# # ============================================================
+
+# class TaskSearch(LoginRequiredMixin, ListView):
+#     model = Task
+#     context_object_name = "tasks"
+#     template_name = "base/task_search.html"
+
+#     def get_queryset(self):
+#         query = self.request.GET.get("q", "").strip()
+
+#         queryset = Task.objects.filter(
+#             user=self.request.user
+#         )
+
+#         if query:
+#             queryset = queryset.filter(
+#                 Q(title__icontains=query)
+#                 | Q(description__icontains=query)
+#             )
+
+#         return queryset.order_by("-id")
+
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+
+#         context["query"] = self.request.GET.get("q", "").strip()
+#         context["result_count"] = context["tasks"].count()
+
+#         return context
+
+
+# # ============================================================
+# # TASK DASHBOARD
+# # ============================================================
+
+# class TaskDashboard(
+#     LoginRequiredMixin,
+#     TaskStatsMixin,
+#     ListView,
+# ):
+#     model = Task
+#     template_name = "base/dashboard.html"
+#     context_object_name = "tasks"
+
+#     def get_queryset(self):
+#         return Task.objects.filter(
+#             user=self.request.user
+#         ).order_by("-id")
+
+#     def get_context_data(self, **kwargs):
+#         context = super().get_context_data(**kwargs)
+#         context.update(self.get_task_stats())
+
+#         tasks = self.get_queryset()
+
+#         context["total"] = context["total_tasks"]
+#         context["completed"] = context["completed_tasks"]
+#         context["pending"] = context["pending_tasks"]
+
+#         context["recent_tasks"] = tasks[:5]
+#         context["completed_tasks"] = tasks.filter(
+#             complete=True
+#         )[:5]
+#         context["pending_tasks"] = tasks.filter(
+#             complete=False
+#         ).order_by("id")[:5]
+
+#         return context
+
+
+# # ============================================================
+# # QUICK ADD TASK
+# # ============================================================
+
+# class QuickTaskForm(forms.Form):
+#     title = forms.CharField(
+#         max_length=255,
+#         strip=True,
+#         error_messages={
+#             "required": "Task title cannot be empty.",
+#         },
+#     )
+#     description = forms.CharField(
+#         required=False,
+#         strip=True,
+#         widget=forms.Textarea,
+#     )
+
+
+# class QuickAddTask(LoginRequiredMixin, FormView):
+#     form_class = QuickTaskForm
+#     success_url = reverse_lazy("tasks")
+
+#     def form_valid(self, form):
+#         Task.objects.create(
+#             user=self.request.user,
+#             title=form.cleaned_data["title"],
+#             description=form.cleaned_data["description"],
+#             complete=False,
+#         )
+
+#         messages.success(
+#             self.request,
+#             "Quick task added successfully.",
+#         )
+
+#         return super().form_valid(form)
+
+#     def form_invalid(self, form):
+#         messages.error(
+#             self.request,
+#             "Please provide a valid task title.",
+#         )
+#         return super().form_invalid(form)
+
+
+# # ============================================================
+# # REMOVE EMPTY TASKS
+# # ============================================================
+
+# class RemoveEmptyTasks(LoginRequiredMixin, View):
+
+#     def post(self, request):
+#         queryset = Task.objects.filter(
+#             user=request.user
+#         ).filter(
+#             Q(title__isnull=True) | Q(title__exact="")
+#         )
+
+#         count = queryset.count()
+#         queryset.delete()
+
+#         messages.info(
+#             request,
+#             f"{count} empty task(s) removed.",
+#         )
+
+#         return redirect("tasks")
+
+
+# # ============================================================
+# # TASK SUMMARY
+# # ============================================================
+
+# class TaskSummary(
+#     LoginRequiredMixin,
+#     TaskStatsMixin,
+#     View,
+# ):
+
+#     def get(self, request):
+#         stats = self.get_task_stats()
+
+#         context = {
+#             "total": stats["total_tasks"],
+#             "completed": stats["completed_tasks"],
+#             "pending": stats["pending_tasks"],
+#             "percentage": stats["completion_percentage"],
+#         }
+
+#         return render(
+#             request,
+#             "base/summary.html",
+#             context,
+#         )
